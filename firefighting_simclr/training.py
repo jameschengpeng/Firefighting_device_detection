@@ -83,6 +83,29 @@ def _save_json(path: Path, payload: Dict[str, Any]) -> None:
 
     path.write_text(json.dumps(payload, indent=2, default=_default), encoding="utf-8")
 
+
+# Compute NT-Xent loss on a contrastive loader without updating weights.
+# The model is switched to eval() so BatchNorm uses its running statistics.
+def _evaluate_simclr(
+    model: SimCLRModel,
+    loader: DataLoader,
+    temperature: float,
+    device: torch.device,
+) -> float:
+    model.eval()
+    total_loss = 0.0
+    total_samples = 0
+    with torch.no_grad():
+        for view_a, view_b in loader:
+            view_a = view_a.to(device, non_blocking=True)
+            view_b = view_b.to(device, non_blocking=True)
+            projection_a, projection_b = model(view_a, view_b)
+            loss = nt_xent_loss(projection_a, projection_b, temperature)
+            total_loss += loss.item() * view_a.size(0)
+            total_samples += view_a.size(0)
+    model.train()
+    return total_loss / max(1, total_samples)
+
 # The pretraining aims to learn a good feature representation of the crops using contrastive learning,
 # where we apply strong data augmentations to create two different views of the same crop and train
 # the model to bring their projections closer together while pushing apart projections of different crops.
@@ -94,12 +117,20 @@ def run_pretraining(args) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     train_records, _ = load_split_records(args.data_dir, "train")
-    
-    # build a dataset that applies the SimCLRViewTransform to each crop,
-    # which generates two augmented views of the same crop for contrastive learning
+    valid_records, _ = load_split_records(args.data_dir, "valid")
+
+    simclr_transform = SimCLRViewTransform(args.image_size)
+
+    # both splits use the same SimCLRViewTransform: two random augmented views per crop
     dataset = SymbolCropDataset(
         train_records,
-        transform=SimCLRViewTransform(args.image_size),
+        transform=simclr_transform,
+        padding_ratio=args.crop_padding,
+    )
+    # also do it on validation set because our dataset is small, which means overfitting can happen quickly.
+    valid_dataset = SymbolCropDataset(
+        valid_records,
+        transform=simclr_transform,
         padding_ratio=args.crop_padding,
     )
     loader = make_data_loader(
@@ -109,6 +140,15 @@ def run_pretraining(args) -> Path:
         num_workers=args.num_workers,
         device=device,
         drop_last=True,
+    )
+    # drop_last=False so every validation crop is evaluated
+    valid_loader = make_data_loader(
+        valid_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        device=device,
+        drop_last=False,
     )
 
     encoder, feature_dim = build_backbone(args.backbone)
@@ -151,7 +191,12 @@ def run_pretraining(args) -> Path:
 
         scheduler.step()
         epoch_loss = running_loss / len(dataset)
-        history.append({"epoch": epoch, "loss": epoch_loss})
+        valid_loss = _evaluate_simclr(model, valid_loader, args.temperature, device)
+        history.append({"epoch": epoch, "train_loss": epoch_loss, "valid_loss": valid_loss})
+        tqdm.write(
+            f"SimCLR epoch {epoch}/{args.simclr_epochs}  "
+            f"train_loss={epoch_loss:.4f}  valid_loss={valid_loss:.4f}"
+        )
 
     checkpoint_path = output_dir / "simclr_pretrain.pt"
     torch.save(
@@ -170,7 +215,8 @@ def run_pretraining(args) -> Path:
         output_dir / "pretrain_history.json",
         {
             "device": str(device),
-            "num_crops": len(dataset),
+            "train_crops": len(dataset),
+            "valid_crops": len(valid_dataset),
             "epochs": history,
         },
     )
@@ -250,7 +296,7 @@ def run_finetuning(args, encoder_checkpoint: str | None = None) -> Path:
 
     train_dataset = SymbolCropDataset(
         train_records,
-        transform=build_supervised_transform(args.image_size, train=True),
+        transform=build_supervised_transform(args.image_size, train=True), # in finetuning phase, use a different set of augmentations suitable for supervised learning
         label_mapping=label_mapping,
         padding_ratio=args.crop_padding,
     )

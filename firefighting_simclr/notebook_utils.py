@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,7 +35,7 @@ def ensure_repo_on_path(start: Path | str | None = None) -> Path:
 def make_experiment_args(
     *,
     data_dir: Path | str,
-    output_dir: Path | str,
+    output_dir: Path | str | None = None,
     backbone: str = "resnet18",
     image_size: int = 96,
     batch_size: int = 128,
@@ -56,7 +57,7 @@ def make_experiment_args(
 ) -> SimpleNamespace:
     return SimpleNamespace(
         data_dir=Path(data_dir),
-        output_dir=Path(output_dir),
+        output_dir=Path(output_dir) if output_dir is not None else None,
         backbone=backbone,
         image_size=image_size,
         batch_size=batch_size,
@@ -76,6 +77,29 @@ def make_experiment_args(
         label_smoothing=label_smoothing,
         linear_probe_epochs=linear_probe_epochs,
     )
+
+
+def new_experiment_dir(runs_dir: Path | str, args: SimpleNamespace) -> Path:
+    """Create the next arg_setting_N subfolder, save args.json inside it, and return the path."""
+    runs_dir = Path(runs_dir)
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
+    existing_nums = []
+    for d in runs_dir.iterdir():
+        if d.is_dir():
+            m = re.match(r"arg_setting_(\d+)$", d.name)
+            if m:
+                existing_nums.append(int(m.group(1)))
+    next_n = max(existing_nums, default=0) + 1
+
+    exp_dir = runs_dir / f"arg_setting_{next_n}"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}
+    (exp_dir / "args.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    print(f"Experiment directory: {exp_dir}")
+    return exp_dir
 
 
 def clone_args(args: SimpleNamespace, **overrides: Any) -> SimpleNamespace:

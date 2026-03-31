@@ -13,6 +13,7 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
+# a crop from an image based on a bounding box annotation, along with metadata about the category and split
 @dataclass(frozen=True)
 class CropRecord:
     image_path: Path
@@ -23,7 +24,7 @@ class CropRecord:
     image_id: int
     annotation_id: int
 
-
+# provides two transformed views of the same input image for SimCLR contrastive learning
 class SimCLRViewTransform:
     def __init__(self, image_size: int) -> None:
         blur_kernel = max(3, int(image_size * 0.1))

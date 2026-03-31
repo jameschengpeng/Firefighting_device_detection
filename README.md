@@ -5,17 +5,19 @@ https://universe.roboflow.com/yaid-pzikt/firefighting-device-detection/dataset/6
 
 ## Approach
 
-The dataset is exported in COCO detection format, and we train and finetune a SimCLR with ResNet as the encoder. SimCLR is a representation-learning method rather than an object detector, so this project converts the COCO boxes into symbol crops and trains in two stages:
+The dataset is exported in COCO detection format, and we train and finetune a SimCLR with ResNet as the encoder. SimCLR is a representation-learning method rather than an object detector, so this project converts the COCO boxes into symbol crops and trains in two phases:
 
-1. Self-supervised SimCLR pretraining on cropped symbols from the training split to fit the ResNet encoder.
+1. Pretraining phase: apply the Self-supervised SimCLR pretraining on cropped symbols from the training set to fit the ResNet encoder. The SimCLR consists of a ResNet encoder and a projection header, which together transforms an image crop to a vector. After doing data augmentataion, we want the augmented crops coming from the same original crops to be as close as possible, while those from different original crops to be as far as possible.
 2. Supervised fine-tuning of the encoder plus a classification head on the cropped symbol labels for the final classification task.
 
+What makes this project different from the original paper is that the original paper did not evaluate the SimCLR's loss on validation set during pretraining phase, which is due to the sufficiently large size of dataset on ImageNet, but here we have implemented the model evaluation on the evaluation set to avoid overfitting. The reason is because our dataset here is much smaller than ImageNet, so the risk of overfitting is higher. If overfitted, the common practices are: increase weight decay in AdamW, reduce the pretraining epochs...
 
 ## Dataset Notes
 
 - `Data/train`, `Data/valid`, and `Data/test` contain the images and COCO annotations.
 - The training split contains 40 labeled classes with annotations.
-- One class, `explosion-proof-smoke-detector`, appears in validation but not in training, so the fine-tuning workflow filters validation/test samples down to classes that actually exist in the training split.
+- The finetuning workflow filters validation/test samples down to the classes that actually exist in the training split.
+
 
 ## Files
 
@@ -23,7 +25,7 @@ The dataset is exported in COCO detection format, and we train and finetune a Si
 - `firefighting_simclr/models.py`: ResNet-18 backbone, SimCLR projection head, and classifier.
 - `firefighting_simclr/training.py`: training loops, evaluation, and artifact saving.
 - `firefighting_simclr/notebook_utils.py`: notebook-friendly helpers for building configs and running the full pipeline.
-- `notebooks/simclr_firefighting_demo.ipynb`: main demonstration notebook for the assignment.
+- `notebooks/simclr_firefighting_demo.ipynb`: main demonstration notebook
 
 ## Install
 
@@ -37,26 +39,11 @@ A presentation-friendly notebook is available at `notebooks/simclr_firefighting_
 
 The notebook is self-contained and can call the training pipeline directly through helper functions in `firefighting_simclr/notebook_utils.py`.
 
-In VS Code, open that file with the Jupyter extension and select the same Python interpreter used for this project. If the terminal command `jupyter` is not on PATH, that is still fine here because the environment supports Jupyter through:
-
-```bash
-python -m jupyter --version
-```
-
 ## Run
 
-The recommended way to run experiments now is from the notebook:
+The recommended way to run experiments now is from the notebook. Follow the code chunks in order. 
 
-1. Open `notebooks/simclr_firefighting_demo.ipynb`.
-2. Run the bootstrap and import cells first.
-3. Run the smoke-test config cell to verify the pipeline.
-4. Run `run_full_pipeline(smoke_args)` for a quick check or switch to `full_args` for a longer training run.
 
-If you prefer running from a plain Python session instead of Jupyter, the same helper module can be used like this:
-
-```bash
-python -c "from pathlib import Path; from firefighting_simclr.notebook_utils import make_experiment_args, run_full_pipeline; args = make_experiment_args(data_dir=Path('Data'), output_dir=Path('outputs/final_run'), device='cuda', amp=True); run_full_pipeline(args)"
-```
 
 ## Outputs
 
@@ -68,6 +55,8 @@ The training pipeline saves:
 - `finetune_history.json`: fine-tuning history.
 - `test_metrics.json`: final test metrics and per-class report.
 - `dataset_summary.json`: crop counts and filtered-class summary.
+
+For the ease of comparing different configurations of the arguments, we save the results above to subfolders named `arg_setting_N`, where N is non-negative integer.
 
 ## Default Training Choices
 
