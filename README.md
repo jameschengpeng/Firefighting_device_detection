@@ -5,12 +5,11 @@ https://universe.roboflow.com/yaid-pzikt/firefighting-device-detection/dataset/6
 
 ## Approach
 
-The dataset is exported in COCO detection format, but the assignment asks us to fine-tune SimCLR to recognize the symbols. SimCLR is a representation-learning method rather than an object detector, so this project converts the COCO boxes into symbol crops and trains in two stages:
+The dataset is exported in COCO detection format, and we train and finetune a SimCLR with ResNet as the encoder. SimCLR is a representation-learning method rather than an object detector, so this project converts the COCO boxes into symbol crops and trains in two stages:
 
-1. Self-supervised SimCLR pretraining on cropped symbols from the training split.
-2. Supervised fine-tuning of the encoder plus a classification head on the cropped symbol labels.
+1. Self-supervised SimCLR pretraining on cropped symbols from the training split to fit the ResNet encoder.
+2. Supervised fine-tuning of the encoder plus a classification head on the cropped symbol labels for the final classification task.
 
-This keeps the solution aligned with the assignment while still using the existing annotations.
 
 ## Dataset Notes
 
