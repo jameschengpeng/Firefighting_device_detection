@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -11,7 +9,7 @@ from torchvision import models
 def build_backbone(name: str = "resnet18") -> tuple[nn.Module, int]:
     if name != "resnet18":
         raise ValueError(f"Unsupported backbone: {name}")
-
+    # Use an untrained ResNet as the backbone encoder
     backbone = models.resnet18(weights=None)
     feature_dim = backbone.fc.in_features
     backbone.fc = nn.Identity()
@@ -86,8 +84,8 @@ def nt_xent_loss(
     projections = torch.cat([projection_a, projection_b], dim=0)
     projections = F.normalize(projections, dim=1)
 
-    similarity = projections @ projections.T
-    similarity = similarity / temperature
+    similarity = projections @ projections.T # B x B, i,j entry is the cosine similarity between projection i and j
+    similarity = similarity / temperature # divide by temperature as indicated in the paper
 
     mask = torch.eye(2 * batch_size, device=similarity.device, dtype=torch.bool)
     similarity = similarity.masked_fill(mask, torch.finfo(similarity.dtype).min)
@@ -97,9 +95,9 @@ def nt_xent_loss(
 
     return F.cross_entropy(similarity, targets)
 
-
+# load the pretrained encoder state dict from a checkpoint
 def load_encoder_state_dict(checkpoint_path: str, device: torch.device) -> dict[str, torch.Tensor]:
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     state_dict = checkpoint.get("model_state", checkpoint)
 
     encoder_state = {

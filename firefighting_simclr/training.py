@@ -43,12 +43,11 @@ def seed_everything(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def choose_device(preferred: str) -> torch.device:
-    if preferred == "auto":
-        preferred = "cuda" if torch.cuda.is_available() else "cpu"
-    return torch.device(preferred)
+def choose_device() -> torch.device:
+    my_device = "cuda" if torch.cuda.is_available() else "cpu"
+    return torch.device(my_device)
 
-
+# build the dataloader for training, evaluation, and testing
 def make_data_loader(
     dataset,
     batch_size: int,
@@ -69,7 +68,7 @@ def make_data_loader(
         drop_last=drop_last,
     )
 
-
+# if on cuda, use mixed precision training to speed up and save memory, otherwise do nothing
 def _autocast_context(device: torch.device, enabled: bool):
     if device.type == "cuda":
         return torch.autocast(device_type="cuda", dtype=torch.float16, enabled=enabled)
@@ -87,9 +86,10 @@ def _save_json(path: Path, payload: Dict[str, Any]) -> None:
 # The pretraining aims to learn a good feature representation of the crops using contrastive learning,
 # where we apply strong data augmentations to create two different views of the same crop and train
 # the model to bring their projections closer together while pushing apart projections of different crops.
+# return the path to the saved checkpoint
 def run_pretraining(args) -> Path:
     seed_everything(args.seed)
-    device = choose_device(args.device)
+    device = choose_device()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -134,8 +134,8 @@ def run_pretraining(args) -> Path:
         progress = tqdm(loader, desc=f"SimCLR epoch {epoch}/{args.simclr_epochs}", leave=False)
 
         for view_a, view_b in progress:
-            view_a = view_a.to(device, non_blocking=True)
-            view_b = view_b.to(device, non_blocking=True)
+            view_a = view_a.to(device)
+            view_b = view_b.to(device)
 
             optimizer.zero_grad(set_to_none=True)
             with _autocast_context(device, enabled=args.amp and device.type == "cuda"):
@@ -233,7 +233,7 @@ def _evaluate_classifier(
 
 def run_finetuning(args, encoder_checkpoint: str | None = None) -> Path:
     seed_everything(args.seed)
-    device = choose_device(args.device)
+    device = choose_device()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
