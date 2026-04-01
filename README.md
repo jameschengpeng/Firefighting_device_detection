@@ -1,6 +1,6 @@
 # Firefighting Device Detection with SimCLR
 
-This repository fine-tunes a SimCLR-style visual encoder on the Roboflow firefighting device dataset:
+This repository pretrains and fine-tunes a SimCLR-style visual encoder on the Roboflow firefighting device dataset:
 https://universe.roboflow.com/yaid-pzikt/firefighting-device-detection/dataset/6
 
 ## Approach
@@ -8,7 +8,7 @@ https://universe.roboflow.com/yaid-pzikt/firefighting-device-detection/dataset/6
 The dataset is exported in COCO detection format, and we train and finetune a SimCLR with ResNet as the encoder. SimCLR is a representation-learning method rather than an object detector, so this project converts the COCO boxes into symbol crops and trains in two phases:
 
 1. Pretraining phase: apply the Self-supervised SimCLR pretraining on cropped symbols from the training set to fit the ResNet encoder. The SimCLR consists of a ResNet encoder and a projection header, which together transforms an image crop to a vector. After doing data augmentataion, we want the augmented crops coming from the same original crops to be as close as possible, while those from different original crops to be as far as possible.
-2. Supervised fine-tuning of the encoder plus a classification head on the cropped symbol labels for the final classification task.
+2. Finetuning phase: Supervised fine-tuning of the encoder plus a classification head on the cropped symbol labels for the final classification task.
 
 What makes this project different from the original paper is that the original paper did not evaluate the SimCLR's loss on validation set during pretraining phase, which is due to the sufficiently large size of dataset on ImageNet, but here we have implemented the model evaluation on the evaluation set to avoid overfitting. The reason is because our dataset here is much smaller than ImageNet, so the risk of overfitting is higher. If overfitted, the common practices are: increase weight decay in AdamW, reduce the pretraining epochs...
 
