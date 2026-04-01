@@ -12,6 +12,7 @@ def build_backbone(name: str = "resnet18") -> tuple[nn.Module, int]:
     # Use an untrained ResNet as the backbone encoder
     backbone = models.resnet18(weights=None)
     feature_dim = backbone.fc.in_features
+    # remove the final fully connected layer because we will add the projection head
     backbone.fc = nn.Identity()
     return backbone, feature_dim
 
@@ -21,7 +22,7 @@ class ProjectionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
         super().__init__()
         self.layers = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(input_dim, hidden_dim),  #input_dim is the feature_dim from the backbone
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, output_dim),
